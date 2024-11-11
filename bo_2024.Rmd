@@ -1,0 +1,191 @@
+---
+title: "bo_2024"
+author: "Gama Junior Vertu"
+date: "2024-11-11"
+output:
+  pdf_document: default
+  html_document: default
+---
+# 1. Introduction
+
+## Contexte
+Le Ballon d'Or est une récompense emblématique dans le monde du football, où les meilleurs joueurs de l'année sont sélectionnés par des journalistes du monde entier. Mais le système de points utilisé pour ces votes pourrait-il influencer le classement final ? L'idée ici est de tester différentes distributions de points pour voir si elles auraient changé les résultats pour les classements de 2024 et 2019. **C'est un exercice qui permet de mieux comprendre l'impact du système de notation, sans prétention d’analyse approfondie ou de recherche.**
+
+## Objectifs de l'analyse
+Cette analyse cherche à observer l’effet de systèmes de points alternatifs sur les classements du Ballon d'Or pour deux années récentes, juste pour voir si le Top 10 aurait changé. Plus précisément :
+
+- Regarder si le **Top 10 du Ballon d'Or 2024** aurait été différent avec la distribution des points de 2023.
+- Regarder si le **Top 10 du Ballon d'Or 2019** aurait été différent en appliquant le système de points de 2017.
+
+
+# 2. Méthodologie
+
+## Description des systèmes de points
+En 2024, les journalistes attribuent des points aux 10 meilleurs joueurs selon une échelle : 15, 12, 10, 8, 7, 5, 4, 3, 2, 1. En 2023, la notation se limite aux 5 premiers avec une répartition des points en 6, 4, 3, 2, et 1. En 2017, seuls les 3 premiers recevaient des points (5, 3, et 1). La variation entre ces systèmes permet d'observer les effets potentiels sur les classements finaux.
+
+## Sources de données
+Les données sont issues de sources en ligne officielles :  
+- [Ballon d'Or 2024](https://en.wikipedia.org/wiki/2024_Ballon_d%27Or)  
+- [Ballon d'Or 2019](https://fr.wikipedia.org/wiki/Ballon_d%27or_2019)
+
+Ces données incluent les scores par pays, permettant de simuler divers systèmes de points.
+
+## Processus d'analyse
+Pour chaque année, les données de classement sont récupérées et organisées pour correspondre aux différentes distributions de points. Ensuite, les scores sont calculés pour chaque joueur en appliquant les systèmes de points alternatifs, permettant d’établir un classement simulé et de le comparer avec le classement réel.
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Chargement des donnees
+les packages
+
+```{r message=FALSE, warning=FALSE}
+library(rvest)
+library(janitor)
+library(dplyr)
+library(tidyr)
+library(formattable)
+```
+
+#### les donnees
+
+Importation les donnes
+
+```{r}
+urls <- c("https://en.wikipedia.org/wiki/2024_Ballon_d%27Or" , "https://fr.wikipedia.org/wiki/Ballon_d%27or_2019")
+
+bo_2024 <- read_html(urls[1])
+bo_2019 <- read_html(urls[2])
+  
+```
+
+
+
+### 1.Classement 2024 avec le système actuel :
+Les journalistes attribuent des points à 10 joueurs, avec les points suivants :
+15, 12, 10, 8, 7, 5, 4, 3, 2 et 1.
+
+```{r}
+#recuperation de la table sur les details des votes par pays (2024)
+votes_pays <- bo_2024 %>% 
+  html_elements("table") %>% 
+  html_table() %>% 
+  .[[4]] %>%  # Erreur de retour : La 2em colonne devrait s'appeler "rodri" 
+  rename(rodri = colnames(.)[2]) %>% #Renomme la 2em colonne en "rodri"
+  clean_names() 
+
+votes_pays %>% 
+  select(-country) %>% 
+  summarise(across(everything(), sum)) %>% 
+  pivot_longer(cols= everything() , names_to = "joueur" , values_to = "score") %>% 
+  top_n(10 , score) %>% 
+  arrange(desc(score)) %>% 
+  mutate(place = C(1:10)) %>% 
+  select(place , everything()) 
+```
+
+
+### 2.Classement 2024 avec le système alternatif de 2023 :
+Et si comme en 2023 , les journalistes choisissaient que 5 joueurs et leur attribuaient les points suivants :
+6, 4, 3, 2 et 1.
+
+```{r}
+#resultat dans le 6 4 3 2 1
+votes_pays %>% 
+  select(-country) %>% 
+  mutate(across(everything() , ~ case_when( 
+    . == 15 ~ 6 , #replacement des points
+    . == 12 ~ 4 ,
+    . == 10 ~ 3 ,
+    . == 8 ~ 2 ,
+    . == 7~ 1 ,
+    TRUE ~ 0 #les autres valeurs sont remplaces par zero
+  ))) %>% 
+  summarise(across(everything(), sum)) %>% 
+  pivot_longer(cols= everything() , names_to = "joueur" , values_to = "score") %>% 
+  top_n(10 , score) %>% 
+  arrange(desc(score))%>% 
+  mutate(place = C(1:10)) %>% 
+  select(place , everything()) 
+  
+
+```
+ 
+
+
+
+### Classement 2019
+
+Jusqu'en 2017, les journalistes étaient invités à choisir leurs 3 joueurs favoris, avec une attribution de points répartis de la manière suivante : 5 pour le premier, 3 pour le deuxième et 1 pour le troisième. Cependant, à partir de 2018, ce système a évolué : les journalistes devaient désormais sélectionner leurs 5 joueurs, avec une attribution de points suivant le classement 6 pour le premier, 4 pour le deuxième, 3 pour le troisième, 2 pour le quatrième et 1 pour le cinquième. 
+faisons la meme analyse pour voir si le top 10 aurait changer si on aplliquer la repartition de 2017
+
+
+
+#### resultat dans le 6 4 3 2 1
+
+```{r}
+#recuperation de la table sur les details des votes par pays (2024)
+pays_vote <- bo_2019 %>% 
+  html_elements("table") %>% 
+  html_table() %>% 
+  .[[5]] %>%     # recupre la 5 emme table
+  #tout les colonnes de la table on le meme noms "pays votant"
+  `colnames<-`(.[1, ]) %>%  #renome les colonnes avec le nom de la premiere ligne
+  slice(-1 , -177) %>% 
+  clean_names %>% 
+  #les colonnes etant de type char , on les transforme en numeric
+  mutate(across(everything(), as.numeric)) 
+
+## Resultat dans le 6 4 3 2 1
+pays_vote %>% 
+  select(-confederation ,-pays_votant) %>% 
+  summarise(across(everything(), sum , na.rm= TRUE)) %>% 
+  pivot_longer(cols= everything() , names_to = "joueur" , values_to = "score")  %>% 
+  top_n(10 , score) %>% 
+  arrange(desc(score))%>%
+  mutate(place = c(1:10)) %>% 
+  select(place , everything())  
+  
+
+```
+ 
+ 
+### Classement 2019 avec le système de points de 2017
+
+```{r}
+# resultat dans le 5 3 1
+pays_vote %>% 
+  select(-confederation ,-pays_votant) %>% 
+  mutate(across(everything() , ~case_when(
+    . == 6 ~ 5 ,
+    . == 4 ~ 3 ,
+    . == 3 ~ 1 ,
+    TRUE ~ 0
+  ))) %>% 
+  summarise(across(everything(), sum , na.rm= TRUE)) %>% 
+  pivot_longer(cols= everything() , names_to = "joueur" , values_to = "score")  %>% 
+  top_n(10 , score) %>% 
+  arrange(desc(score)) %>%
+  mutate(place = c(1:12)) %>% 
+  select(place , everything())
+
+```
+
+## 4. Discussion
+
+### Comparaison des classements
+Les résultats indiquent qu’en passant d’un système basé sur 10 joueurs à un système limité à 5 ou 3 joueurs, les positions finales des joueurs sont modifiées. Par exemple, des joueurs ayant des scores modérés dans un système basé sur 10 joueurs voient souvent leurs positions décliner dans les classements issus des systèmes plus restreints, où la concentration des points est plus élevée.
+
+### Implications de la distribution des points
+Dans les systèmes de points qui limitent le nombre de joueurs sélectionnés, les meilleurs joueurs sont davantage favorisés en tête des classements, en raison d'une répartition plus focalisée des points. Cela introduit des écarts notables dans les positions des joueurs qui, dans un système à 10 joueurs, se trouveraient dans des positions intermédiaires ou inférieures.
+
+### Limites de l'analyse
+Les conclusions de cette analyse sont limitées aux données disponibles et ne cherchent pas à prédire les effets de changements de règles au-delà de ce contexte spécifique. De plus, cette simulation ne prend en compte que certains systèmes de points, et d’autres facteurs pouvant influencer les votes n’ont pas été inclus.
+
+## 5. Conclusion
+
+### Résumé des principaux résultats
+Cette analyse montre que la distribution des points influence la composition du Top 10 du Ballon d'Or, en particulier pour les joueurs dans les positions intermédiaires ou inférieures. En effet, les systèmes qui concentrent les points sur un nombre réduit de joueurs renforcent la position des leaders dans le classement, ce qui peut complexifier l'identification d'un "meilleur joueur" pour des saisons sans domination nette d’un joueur.
+
